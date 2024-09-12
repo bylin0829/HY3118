@@ -15,7 +15,7 @@
 
 #define HW_ID 0x50
 HY3118 adc(HW_ID);
-void adc_config();
+void hy3118Config();
 
 void setup()
 {
@@ -23,7 +23,7 @@ void setup()
   while (!Serial)
     ; // Leonardo: wait for serial monitor
   Serial.println("HY3118 program 0909 21:39");
-  adc_config();
+  hy3118Config();
   adc.tare();
 }
 
@@ -56,7 +56,7 @@ void loop()
 1kg 128400
 */
 
-void adc_config()
+void hy3118Config()
 {
   adc.begin();
   adc.REG_0(false, false, true, true, true, true);

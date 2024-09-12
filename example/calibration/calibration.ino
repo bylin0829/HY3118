@@ -15,34 +15,31 @@
 
 #define HW_ID 0x50
 HY3118 adc(HW_ID);
-void adc_config();
+void hy3118Config();
 
-void setup()
-{
+void setup() {
   Serial.begin(115200);
   while (!Serial)
-    ; // Leonardo: wait for serial monitor
-  Serial.println("HY3118 Calibration");
-  adc_config();
+    ;  // Leonardo: wait for serial monitor
+
+  hy3118Config();  // set HY3118
+  while (!adc.getSmoothedDataStatus()) {
+    Serial.println(adc.getSmoothedData());
+  }  // wait for smoothed data sampling done
+  Serial.println("Smooth flow is done");
   adc.tare();
   Serial.println(adc.getTareOffset());
   delay(3000);
 }
 
-void loop()
-{
-  adc.updateData();
-  if (adc.isDataReady())
-  {
-    Serial.print(adc.getTareOffset());
-    Serial.print("  ");
-    Serial.println(adc.getAdcData());
-  }
+void loop() {
+  Serial.print(adc.getTareOffset());
+  Serial.print("  ");
+  Serial.println(adc.getSmoothedData());
   delay(100);
 }
 
-void adc_config()
-{
+void hy3118Config() {
   adc.begin();
 
   adc.REG_0(false, false, true, true, true, true);

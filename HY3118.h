@@ -164,20 +164,17 @@ public:
     void REG_3(OscillatorSource osc, FullRange frb, PGA gain_pga, ADGN gain_adgn);
     // 設定 LDO 電壓、參考電壓、採樣率
     void REG_4(LDOVoltage ldo, ReferenceVoltage refo, HighSpeed hs, ADCOutputRate osr);
-    void updateData();
     void writeRegister(uint8_t reg, uint8_t data);
     uint8_t readRegister(uint8_t reg);
     long getTareOffset(void);
     void setTareOffset(long newoffset);
-    float getData(void);
     void setCalFactor(float cal);
     float getCalFactor(void);
     void tare(void); // zero the scale, wait for tare to finnish (blocking)
-    bool isDataReady(void);
-    long getAdcData(void);
-
+    float getSmoothedData(); // returns the smoothed data value calculated from the dataset
+    bool getSmoothedDataStatus();
 protected:
-    long smoothedData(); // returns the smoothed data value calculated from the dataset
+    void updateRawData();
 
     uint8_t _address;
     float calFactor = 1.0;      // calibration factor as given in function setCalFactor(float cal)
@@ -186,14 +183,17 @@ protected:
     int samplesInUse = SAMPLES;
     long lastSmoothedData = 0;
     uint8_t divBit = DIVB;
-    volatile long dataSampleSet[DATA_SET + 1];
+    volatile long dataSampleSet[SAMPLES];
+    uint8_t readIndex = 0;
+    long smoothedDataSum = 0;
+    float smoothedDataAvg = 0;
+    bool isSmoothedDataReady = 0;
     bool tareTimeoutFlag = 0;
     unsigned int tareTimeOut = (SAMPLES + IGN_HIGH_SAMPLE + IGN_HIGH_SAMPLE) * 150; // tare timeout time in ms, no of samples * 150ms (10SPS + 50% margin)
     bool tareTimeoutDisable = 0;
-    int readIndex = 0;
     bool isTareDone = 0;
-    bool isAdcDataReady = 0;
-    long adcData = 0;
+    bool isRawDataReady = 0;
+    long adcRawData = 0;
 };
 
 #endif
