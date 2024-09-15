@@ -4,8 +4,6 @@
 #include <Wire.h>
 #include "config.h"
 
-#define DATA_SET SAMPLES + IGN_HIGH_SAMPLE + IGN_LOW_SAMPLE // total samples in memory
-
 #if (SAMPLES == 1)
 #define DIVB 0
 #elif (SAMPLES == 2)
@@ -24,6 +22,37 @@
 #define DIVB 7
 #endif
 
+// REG 0
+enum apo
+{
+    APO_DISABLE,
+    APO_ENABLE
+};
+enum irqen
+{
+    IRQEN_DISABLE,
+    IRQEN_ENABLE
+};
+enum enadc
+{
+    ENADC_DISABLE,
+    ENADC_ENABLE
+};
+enum enldo
+{
+    ENLDO_DISABLE,
+    ENLDO_ENABLE
+};
+enum enrefo
+{
+    ENREFO_DISABLE,
+    ENREFO_ENABLE
+};
+enum enop
+{
+    ENOP_DISABLE,
+    ENOP_ENABLE
+};
 // REG 1
 enum InputChannel
 {
@@ -166,13 +195,15 @@ public:
     void REG_4(LDOVoltage ldo, ReferenceVoltage refo, HighSpeed hs, ADCOutputRate osr);
     void writeRegister(uint8_t reg, uint8_t data);
     uint8_t readRegister(uint8_t reg);
-    long getTareOffset(void);
     void setTareOffset(long newoffset);
+    long getTareOffset(void);
     void setCalFactor(float cal);
     float getCalFactor(void);
-    void tare(void); // zero the scale, wait for tare to finnish (blocking)
-    float getSmoothedData(); // returns the smoothed data value calculated from the dataset
-    bool getSmoothedDataStatus();
+    void tare(void);             // zero the scale, wait for tare to finnish (blocking)
+    float getSmoothedData(void); // returns the smoothed data value calculated from the dataset
+    long getRawData(void);
+    float getWeight(int sampleSize);
+
 protected:
     void updateRawData();
 
@@ -187,13 +218,13 @@ protected:
     uint8_t readIndex = 0;
     long smoothedDataSum = 0;
     float smoothedDataAvg = 0;
-    bool isSmoothedDataReady = 0;
     bool tareTimeoutFlag = 0;
     unsigned int tareTimeOut = (SAMPLES + IGN_HIGH_SAMPLE + IGN_HIGH_SAMPLE) * 150; // tare timeout time in ms, no of samples * 150ms (10SPS + 50% margin)
     bool tareTimeoutDisable = 0;
     bool isTareDone = 0;
     bool isRawDataReady = 0;
     long adcRawData = 0;
+    bool readDataTimeoutFlag = 0;
 };
 
 #endif

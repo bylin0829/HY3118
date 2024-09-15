@@ -1,6 +1,10 @@
 #include "Arduino.h"
 #include "Wire.h"
 #include "HY3118.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+#define HY3118_DBG 0
 
 HY3118::HY3118(uint8_t address) : _address(address) {}
 
@@ -41,22 +45,33 @@ void HY3118::updateRawData()
     Wire.write(0x5);
     Wire.endTransmission(true);
 
-    Wire.requestFrom(_address, (size_t)3);
-    uint32_t tempAdcVal = 0;
-    int i = 2;
-
-    while (Wire.available() > 0)
-    {
-        uint32_t temp = Wire.read();
-        tempAdcVal |= (temp << (i * 8));
-        i--;
-    }
-
+    long myTime = millis();
+    readDataTimeoutFlag = 0;
     isRawDataReady = 0;
-    if (tempAdcVal & 0x01)
+    while (isRawDataReady == 0)
     {
-        adcRawData = tempAdcVal >> 1;
-        isRawDataReady = 1;
+        Wire.requestFrom(_address, (size_t)3);
+        uint32_t tempAdcVal = 0;
+        int i = 2;
+
+        while (Wire.available() > 0)
+        {
+            uint32_t temp = Wire.read();
+            tempAdcVal |= (temp << (i * 8));
+            i--;
+        }
+
+        if (tempAdcVal & 0x01)
+        {
+            adcRawData = tempAdcVal >> 1;
+            isRawDataReady = 1;
+            break;
+        }
+        else if (millis() - myTime > 2000)
+        {
+            readDataTimeoutFlag = 1;
+            break;
+        }
     }
 }
 
@@ -111,25 +126,21 @@ float HY3118::getSmoothedData() // return fresh data from the moving average dat
     // float x = (float)data * calFactorRecip;
     // return x;
     updateRawData();
-    if (isRawDataReady) {
+
+    if (readDataTimeoutFlag == 0)
+    {
         smoothedDataSum = smoothedDataSum - dataSampleSet[readIndex] + adcRawData;
         dataSampleSet[readIndex] = adcRawData;
         readIndex = (readIndex + 1) % SAMPLES;
         smoothedDataAvg = smoothedDataSum / SAMPLES;
-    }
 
-    if (readIndex == (SAMPLES - 1)) { //enable flag once
-        isSmoothedDataReady = 1;
-    }
-
-    if (isSmoothedDataReady)
         return smoothedDataAvg;
+    }
     else
+    {
+        printf("updateRawData() is timeout.\n");
         return 0;
-}
-
-bool HY3118::getSmoothedDataStatus() {
-    return isSmoothedDataReady;
+    }
 }
 
 // set new calibration factor, raw data is divided by this value to convert to readable data
@@ -145,15 +156,36 @@ float HY3118::getCalFactor()
     return calFactor;
 }
 
-// zero the scale, wait for tare to finnish (blocking)
+// zero the scale, wait for tare to finish (blocking)
 void HY3118::tare()
 {
-    float ret = 0;
-    for (int i = 0; i < SAMPLES;)
+    long ret;
+    for (int i = 0; i < SAMPLES * 2; i++)
     {
-        ret += getSmoothedData();
-        i++;
+        getSmoothedData();
     }
-    setTareOffset((long)(ret / SAMPLES));
+    ret = (long)getSmoothedData();
+
+    setTareOffset(ret);
     isTareDone = 1;
+}
+
+long HY3118::getRawData()
+{
+    return adcRawData;
+}
+
+float HY3118::getWeight(int sampleSize)
+{
+    float ret;
+    for (int i = 0; i < sampleSize; i++)
+    {
+        ret = getSmoothedData();
+    }
+#if (HY3118_DBG == 1)
+    printf("smoothed:%f, tareOffset:%f, calfactor:%f", ret, (float)tareOffset, calFactor);
+#endif
+    ret = (ret - (float)tareOffset) * calFactorRecip;
+    ret = (ret < 0.0) ? 0.0 : ret;
+    return ret;
 }
