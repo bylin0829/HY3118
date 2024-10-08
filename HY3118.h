@@ -2,25 +2,8 @@
 #define HY3118_H
 
 #include <Wire.h>
-#include "config.h"
 
-#if (SAMPLES == 1)
-#define DIVB 0
-#elif (SAMPLES == 2)
-#define DIVB 1
-#elif (SAMPLES == 4)
-#define DIVB 2
-#elif (SAMPLES == 8)
-#define DIVB 3
-#elif (SAMPLES == 16)
-#define DIVB 4
-#elif (SAMPLES == 32)
-#define DIVB 5
-#elif (SAMPLES == 64)
-#define DIVB 6
-#elif (SAMPLES == 128)
-#define DIVB 7
-#endif
+#define SAMPLES 16 // default value: 16
 
 // REG 0
 enum apo
@@ -195,7 +178,7 @@ public:
     void REG_4(LDOVoltage ldo, ReferenceVoltage refo, HighSpeed hs, ADCOutputRate osr);
     void writeRegister(uint8_t reg, uint8_t data);
     uint8_t readRegister(uint8_t reg);
-    void setTareOffset(long newoffset);
+    void setTareOffset(long offset);
     long getTareOffset(void);
     void setCalFactor(float cal);
     float getCalFactor(void);
@@ -208,22 +191,19 @@ protected:
     void updateRawData();
 
     uint8_t _address;
+    uint16_t readIndex = 0;
+    uint32_t smoothedDataAvg = 0;
+    volatile long dataSampleSet[SAMPLES];
     float calFactor = 1.0;      // calibration factor as given in function setCalFactor(float cal)
     float calFactorRecip = 1.0; // reciprocal calibration factor (1/calFactor), the HX711 raw data is multiplied by this value
     long tareOffset = 0;
-    int samplesInUse = SAMPLES;
     long lastSmoothedData = 0;
-    uint8_t divBit = DIVB;
-    volatile long dataSampleSet[SAMPLES];
-    uint8_t readIndex = 0;
     long smoothedDataSum = 0;
-    float smoothedDataAvg = 0;
+    long adcRawData = 0;
     bool tareTimeoutFlag = 0;
-    unsigned int tareTimeOut = (SAMPLES + IGN_HIGH_SAMPLE + IGN_HIGH_SAMPLE) * 150; // tare timeout time in ms, no of samples * 150ms (10SPS + 50% margin)
     bool tareTimeoutDisable = 0;
     bool isTareDone = 0;
     bool isRawDataReady = 0;
-    long adcRawData = 0;
     bool readDataTimeoutFlag = 0;
 };
 

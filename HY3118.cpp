@@ -35,7 +35,7 @@ uint8_t HY3118::readRegister(uint8_t reg)
     }
     else
     {
-        return 0; // 讀取失敗
+        return 0; // Read data failed
     }
 }
 
@@ -61,13 +61,13 @@ void HY3118::updateRawData()
             i--;
         }
 
-        if (tempAdcVal & 0x01)
+        if (tempAdcVal & 0x01) // Check if the data is read
         {
             adcRawData = tempAdcVal >> 1;
             isRawDataReady = 1;
             break;
         }
-        else if (millis() - myTime > 2000)
+        else if (millis() - myTime > 5000)
         {
             readDataTimeoutFlag = 1;
             break;
@@ -113,18 +113,13 @@ long HY3118::getTareOffset()
 }
 
 // set new tare offset (raw data value input without the scale "calFactor")
-void HY3118::setTareOffset(long newoffset)
+void HY3118::setTareOffset(long offset)
 {
-    tareOffset = newoffset;
+    tareOffset = offset;
 }
 
 float HY3118::getSmoothedData() // return fresh data from the moving average dataset
 {
-    // long data = 0;
-    // lastSmoothedData = smoothedData();
-    // data = lastSmoothedData - tareOffset;
-    // float x = (float)data * calFactorRecip;
-    // return x;
     updateRawData();
 
     if (readDataTimeoutFlag == 0)
@@ -132,7 +127,7 @@ float HY3118::getSmoothedData() // return fresh data from the moving average dat
         smoothedDataSum = smoothedDataSum - dataSampleSet[readIndex] + adcRawData;
         dataSampleSet[readIndex] = adcRawData;
         readIndex = (readIndex + 1) % SAMPLES;
-        smoothedDataAvg = smoothedDataSum / SAMPLES;
+        smoothedDataAvg = (smoothedDataSum / SAMPLES);
 
         return smoothedDataAvg;
     }
@@ -159,14 +154,12 @@ float HY3118::getCalFactor()
 // zero the scale, wait for tare to finish (blocking)
 void HY3118::tare()
 {
-    long ret;
-    for (int i = 0; i < SAMPLES * 2; i++)
+    for (int i = 0; i < SAMPLES * 3; i++)
     {
         getSmoothedData();
     }
-    ret = (long)getSmoothedData();
 
-    setTareOffset(ret);
+    setTareOffset((long)getSmoothedData());
     isTareDone = 1;
 }
 
