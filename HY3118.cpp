@@ -1,6 +1,10 @@
 #include "Arduino.h"
 #include "Wire.h"
 #include "HY3118.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+#define HY3118_DBG 0
 
 HY3118::HY3118(uint8_t address) : _address(address) {}
 
@@ -31,31 +35,43 @@ uint8_t HY3118::readRegister(uint8_t reg)
     }
     else
     {
-        return 0; // 讀取失敗
+        return 0; // Read data failed
     }
 }
 
-void HY3118::updateData()
+void HY3118::updateRawData()
 {
     Wire.beginTransmission(_address);
     Wire.write(0x5);
     Wire.endTransmission(true);
 
-    Wire.requestFrom(_address, (size_t)3);
-    uint32_t adcVal = 0;
-    int i = 2;
-    while (Wire.available() > 0)
+    long myTime = millis();
+    readDataTimeoutFlag = 0;
+    isRawDataReady = 0;
+    while (isRawDataReady == 0)
     {
-        uint32_t temp = Wire.read();
-        adcVal |= (temp << (i * 8));
-        i--;
-    }
+        Wire.requestFrom(_address, (size_t)3);
+        uint32_t tempAdcVal = 0;
+        int i = 2;
 
-    isAdcDataReady = 0;
-    if (adcVal & 0x01)
-    {
-        adcData = adcVal >> 1;
-        isAdcDataReady = 1;
+        while (Wire.available() > 0)
+        {
+            uint32_t temp = Wire.read();
+            tempAdcVal |= (temp << (i * 8));
+            i--;
+        }
+
+        if (tempAdcVal & 0x01) // Check if the data is read
+        {
+            adcRawData = tempAdcVal >> 1;
+            isRawDataReady = 1;
+            break;
+        }
+        else if (millis() - myTime > 5000)
+        {
+            readDataTimeoutFlag = 1;
+            break;
+        }
     }
 }
 
@@ -81,13 +97,13 @@ void HY3118::REG_2(ReferenceVoltageP vrps, ReferenceVoltageN vrns, DCoffset dcse
 void HY3118::REG_3(OscillatorSource osc, FullRange frb, PGA gain_pga, ADGN gain_adgn)
 {
     uint8_t data = (osc << 6) | (frb << 5) | (gain_pga << 2) | (gain_adgn);
-    writeRegister(0x3, data); // ADC3 暫存器位址
+    writeRegister(0x3, data);
 }
 
 void HY3118::REG_4(LDOVoltage ldo, ReferenceVoltage refo, HighSpeed hs, ADCOutputRate osr)
 {
     uint8_t data = (ldo << 6) | (refo << 5) | (hs << 4) | (osr << 1);
-    writeRegister(0x4, data); // ADC4 暫存器位址
+    writeRegister(0x4, data);
 }
 
 // get the tare offset (raw data value output without the scale "calFactor")
@@ -97,18 +113,29 @@ long HY3118::getTareOffset()
 }
 
 // set new tare offset (raw data value input without the scale "calFactor")
-void HY3118::setTareOffset(long newoffset)
+void HY3118::setTareOffset(long offset)
 {
-    tareOffset = newoffset;
+    tareOffset = offset;
 }
 
-float HY3118::getData() // return fresh data from the moving average dataset
+float HY3118::getSmoothedData() // return fresh data from the moving average dataset
 {
-    long data = 0;
-    lastSmoothedData = smoothedData();
-    data = lastSmoothedData - tareOffset;
-    float x = (float)data * calFactorRecip;
-    return x;
+    updateRawData();
+
+    if (readDataTimeoutFlag == 0)
+    {
+        smoothedDataSum = smoothedDataSum - dataSampleSet[readIndex] + adcRawData;
+        dataSampleSet[readIndex] = adcRawData;
+        readIndex = (readIndex + 1) % SAMPLES;
+        smoothedDataAvg = (smoothedDataSum / SAMPLES);
+
+        return smoothedDataAvg;
+    }
+    else
+    {
+        printf("updateRawData() is timeout.\n");
+        return 0;
+    }
 }
 
 // set new calibration factor, raw data is divided by this value to convert to readable data
@@ -124,28 +151,34 @@ float HY3118::getCalFactor()
     return calFactor;
 }
 
-// zero the scale, wait for tare to finnish (blocking)
+// zero the scale, wait for tare to finish (blocking)
 void HY3118::tare()
 {
-    float ret = 0;
-    for (int i = 0; i < 30;)
+    for (int i = 0; i < SAMPLES * 3; i++)
     {
-        updateData();
-        if (isDataReady())
-        {
-            ret += getAdcData();
-            i++;
-        }
+        getSmoothedData();
     }
-    setTareOffset((long)(ret / 30));
+
+    setTareOffset((long)getSmoothedData());
     isTareDone = 1;
 }
 
-bool HY3118::isDataReady()
+long HY3118::getRawData()
 {
-    return isAdcDataReady;
+    return adcRawData;
 }
-long HY3118::getAdcData()
+
+float HY3118::getWeight(int sampleSize)
 {
-    return adcData - tareOffset;
+    float ret;
+    for (int i = 0; i < sampleSize; i++)
+    {
+        ret = getSmoothedData();
+    }
+#if (HY3118_DBG == 1)
+    printf("smoothed:%f, tareOffset:%f, calfactor:%f", ret, (float)tareOffset, calFactor);
+#endif
+    ret = (ret - (float)tareOffset) * calFactorRecip;
+    ret = (ret < 0.0) ? 0.0 : ret;
+    return ret;
 }
